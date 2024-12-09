@@ -28,6 +28,8 @@ def train(dataloader, model, reference, optimizer, enc, device):
             
             chosen = chosen.to(device)
             rejected = rejected.to(device)
+            chosen_mask = chosen_mask.to(device)
+            rejected_mask = rejected_mask.to(device)
             
             # Forward pass
             chosen_policy_logits = model(chosen)[0]
@@ -58,7 +60,7 @@ def train(dataloader, model, reference, optimizer, enc, device):
             optimizer.step()
         
         # Generate some random text to check progress
-        context = "Once upon a time, in a galaxy"
+        context = "Once upon a time"
         context_tokens = enc.encode(context)
         
         out = sample_sequence(
