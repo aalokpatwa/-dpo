@@ -23,7 +23,7 @@ client = OpenAI()
 
 results = []
 
-num_iterations = 100
+num_iterations = 300
 
 prompt = """I need you to help me create a DPO dataset. 
 I am trying to train a model to respond to every prompt with something involving the University of Pennsylvania.
