@@ -1,6 +1,8 @@
 import torch.nn.functional as F
 import torch
 
+LAMBDA = 5
+
 def logprobs(logits, labels, mask):
     """
     Calculate the average log probabilities for a batch of sequences.
@@ -61,6 +63,11 @@ def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, refe
     chosen_rewards = beta * (model_chosen_logp - reference_chosen_logp)
     rejected_rewards = beta * (model_rejected_logp - reference_rejected_logp)
     
-    loss = -F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
+    logratio = torch.max(torch.zeros_like(model_chosen_logp), reference_chosen_logp - model_chosen_logp)
+    
+    dpop_component = beta * (model_chosen_logp - reference_chosen_logp - LAMBDA * logratio)
+    
+    #loss = -F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
+    loss = -F.logsigmoid((dpop_component - rejected_rewards)).mean()
     return loss, chosen_rewards.cpu().detach().numpy().mean(), rejected_rewards.cpu().detach().numpy().mean()
     
