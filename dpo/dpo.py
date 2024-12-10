@@ -1,8 +1,6 @@
 import torch.nn.functional as F
 import torch
 
-BETA = 0.2
-
 def logprobs(logits, labels, mask):
     """
     Calculate the average log probabilities for a batch of sequences.
@@ -46,10 +44,7 @@ def logprobs(logits, labels, mask):
 
     return avg_log_prob
 
-
-    
-
-def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, reference_rejected_logp):
+def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, reference_rejected_logp, beta):
     """ Computes the DPO objective according to the the paper.
 
     Args:
@@ -57,15 +52,15 @@ def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, refe
         model_rejected_logp (float): Log-prob given to rejected response by actor model. (B,)
         reference_chosen_logp (float): Log-prob given to chosen response by reference model. (B,)
         reference_rejected_logp (float): Log-prob given to rejected response by reference model. (B,)
-
+        beta (float): Hyperparameter controlling how much the model adheres to the reference.
     Returns:
         loss: The overall DPO loss, which we will use for the gradient. Scalar.
         chosen_rewards: Mean reward of chosen responses in the batch. Scalar.
         rejected_rewards: Mean reward of rejected responses in the batch. Scalar.
     """    
-    chosen_rewards = BETA * (model_chosen_logp - reference_chosen_logp)
-    rejected_rewards = BETA * (model_rejected_logp - reference_rejected_logp)
+    chosen_rewards = beta * (model_chosen_logp - reference_chosen_logp)
+    rejected_rewards = beta * (model_rejected_logp - reference_rejected_logp)
     
     loss = -F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
-    return loss, chosen_rewards.detach().mean(), rejected_rewards.detach().mean()
+    return loss, chosen_rewards.cpu().detach().numpy().mean(), rejected_rewards.cpu().detach().numpy().mean()
     

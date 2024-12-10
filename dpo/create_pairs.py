@@ -72,6 +72,6 @@ for i in tqdm(range(num_iterations)):
 
 print (f"Gathered {len(results)} examples.")
 print ("Saving results to file.")
-with open("upenn_test.json", "w") as f:
+with open("./dataset/upenn_test.json", "w") as f:
     json.dump(results, f)
     

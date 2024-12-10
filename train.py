@@ -9,15 +9,17 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import random
 import argparse
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", type=int, default=16)
 parser.add_argument("--epochs", type=int, default=3)
 parser.add_argument("--lr", type=float, default=1e-4)
+parser.add_argument("--beta", type=float, default=0.1)
 
 WEIGHTS_FILE = "results/gpt2-dpo.pt"
 
-def process_batch(batch, model, reference, device):
+def process_batch(batch, model, reference, device, beta):
     chosen = batch["chosen"]
     rejected = batch["rejected"]
     chosen_mask = batch["chosen_mask"]
@@ -43,12 +45,12 @@ def process_batch(batch, model, reference, device):
     
     loss, chosen_rewards, rejected_rewards = dpo_loss(
         chosen_policy_logprobs, rejected_policy_logprobs,
-        chosen_reference_logprobs, rejected_reference_logprobs
+        chosen_reference_logprobs, rejected_reference_logprobs, beta
     )
     
     return loss, chosen_rewards, rejected_rewards
 
-def eval_loss(val_loader, model, reference, device):
+def eval_loss(val_loader, model, reference, device, beta):
     model.eval()
     
     losses = []
@@ -56,13 +58,13 @@ def eval_loss(val_loader, model, reference, device):
     
     with torch.no_grad():
         for i, batch in enumerate(val_loader):
-            loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device)
+            loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device, beta)
             losses.append(loss.item())
             margins.append(chosen_reward - rejected_reward)
     
     return sum(losses) / len(losses), sum(margins) / len(margins)
 
-def train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs):
+def train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta):
     model.train()
     
     
@@ -78,7 +80,7 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device, ep
     scheduler = CosineAnnealingLR(optimizer, T_max = num_batches * epochs, eta_min=1e-7)
     
     for epoch in range(1, epochs + 1):
-        print ("---------------- EPOCH {epoch} / {epochs} ----------------")
+        print (f"---------------- EPOCH {epoch} / {epochs} ----------------")
 
         # Sample some completions from the model to check progress
         model.eval()
@@ -91,12 +93,9 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device, ep
         for i, batch in enumerate(train_loader):
             optimizer.zero_grad()
 
-            print (f"\nBatch {i+1}/{num_batches}")   
-            loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device)
+            loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device, beta)
             
-            print (f"Train Loss: {loss.item()}")
-            print (f"Chosen reward: {chosen_reward}")
-            print (f"Rejected reward: {rejected_reward}")
+            print (f"Step {i+1}/{num_batches} | Loss: {round(loss.item(), 5)} | Chosen r: {round(chosen_reward, 4)} | Rejected r: {round(rejected_reward, 4)}")
             
             train_steps.append(i + (epoch - 1) * num_batches)
             train_losses.append(loss.item())
@@ -108,8 +107,8 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device, ep
             
             scheduler.step()
             
-            if i % (num_batches // 2) == 0:
-                val_loss, val_margin = eval_loss(val_loader, model, reference, device)
+            if i % (num_batches // 8) == 0:
+                val_loss, val_margin = eval_loss(val_loader, model, reference, device, beta)
                 val_losses.append(val_loss)
                 val_margins.append(val_margin)
                 val_steps.append(i + (epoch - 1) * num_batches)
@@ -122,6 +121,7 @@ def main():
     bs = args.batch_size
     epochs = args.epochs
     lr = args.lr
+    beta = args.beta
     
     seed = random.randint(0, 100000)
     torch.random.manual_seed(seed)
@@ -150,7 +150,12 @@ def main():
     train_loader = get_dataloaders(train_set, bs)
     val_loader = get_dataloaders(val_set, bs, shuffle=False)
     
-    train_steps, train_losses, val_steps, val_losses, val_margins = train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs)
+    train_steps, train_losses, val_steps, val_losses, val_margins = train(
+        train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta
+    )
+    
+    if not os.path.exists("results"):
+        os.makedirs("results")
     
     # Save the trained model
     torch.save(model.state_dict(), WEIGHTS_FILE)

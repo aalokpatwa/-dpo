@@ -21,23 +21,15 @@ class DPODataset(Dataset):
         joined_rejected = prompt + self.enc.encode(" ") + rejected
         
         data = {
-            "prompt": prompt,
             "chosen": joined_chosen,
             "rejected": joined_rejected
         }
         
         return data
 
-def custom_collate_fn(
-    batch,
-    pad_token_id=50256,
-    allowed_max_length=None,
-    mask_prompt_tokens=True,
-    device="cpu"
-):
+def custom_collate_fn(batch, pad_token_id=50256, allowed_max_length=None):
     # Initialize lists to hold batch data
     batch_data = {
-        "prompt": [],
         "chosen": [],
         "rejected": [],
         "rejected_mask": [],
@@ -53,9 +45,6 @@ def custom_collate_fn(
 
     # Process each item in the batch
     for item in batch:
-        prompt = item["prompt"]
-        batch_data["prompt"].append(prompt)
-
         for key in ["chosen", "rejected"]:
             # Adjust padding according to the common maximum length
             sequence = item[key]
@@ -76,8 +65,7 @@ def custom_collate_fn(
         if allowed_max_length is not None:
             tensor_stack = tensor_stack[:, :allowed_max_length]
 
-        # Move to the specified device
-        batch_data[key] = tensor_stack.to(device)
+        batch_data[key] = tensor_stack
 
     return batch_data
 
