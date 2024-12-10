@@ -1,4 +1,4 @@
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 import torch
 import json
 from encoder import Encoder
@@ -60,10 +60,10 @@ def custom_collate_fn(
             # Adjust padding according to the common maximum length
             sequence = item[key]
             padded = sequence + [pad_token_id] * (max_length_common - len(sequence))
-            mask = torch.ones(len(padded)).bool()
+            mask = torch.ones(len(padded))
 
-            # Set mask for all padding tokens to False
-            mask[len(sequence):] = False
+            # Set mask for all padding tokens to 0
+            mask[len(sequence):] = 0
 
             batch_data[key].append(torch.tensor(padded))
             batch_data[f"{key}_mask"].append(mask)
@@ -81,6 +81,10 @@ def custom_collate_fn(
 
     return batch_data
 
-def get_dataloader(json_file: str, enc: Encoder, batch_size: int):
+def get_dataloaders(json_file: str, enc: Encoder, batch_size: int):
     dataset = DPODataset(json_file, enc)
-    return DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=True)
+    train_set, val_set = random_split(dataset, [0.9, 0.1])
+    print (len(train_set), len(val_set))
+    train_loader = DataLoader(train_set, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=True)
+    val_loader = DataLoader(val_set, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False)
+    return train_loader, val_loader

@@ -1,6 +1,6 @@
 import torch.nn.functional as F
 
-BETA = 0.2
+BETA = 0.3
 
 def logprobs(logits, targets, mask):
     # Logits will be (B * T * V)
@@ -15,15 +15,15 @@ def logprobs(logits, targets, mask):
     
     logprobs = logprobs * selection_mask
     
-    logprobs = logprobs.mean(dim=-1)
+    logprobs = logprobs.sum(dim=-1)
         
     return logprobs
     
 
 def dpo_loss(model_chosen_logits, model_rejected_logits, reference_chosen_logits, reference_rejected_logits):
-    chosen_diff = BETA * (model_chosen_logits - reference_chosen_logits)
-    rejected_diff = BETA * (model_rejected_logits - reference_rejected_logits)
+    chosen_rewards = BETA * (model_chosen_logits - reference_chosen_logits)
+    rejected_rewards = BETA * (model_rejected_logits - reference_rejected_logits)
     
-    loss = -1 * F.logsigmoid((chosen_diff - rejected_diff)).mean()
-    return loss
+    loss = -1 * F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
+    return loss, chosen_rewards.mean(), rejected_rewards.mean()
     
