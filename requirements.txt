@@ -5,3 +5,4 @@ transformers
 datasets
 regex
 tiktoken
+matplotlib
