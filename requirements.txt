@@ -6,3 +6,4 @@ datasets
 regex
 tiktoken
 matplotlib
+dotenv

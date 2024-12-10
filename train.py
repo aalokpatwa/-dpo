@@ -8,10 +8,12 @@ import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import random
+import argparse
 
-BATCH_SIZE = 8
-EPOCHS = 5
-LEARNING_RATE = 1e-4
+parser = argparse.ArgumentParser()
+parser.add_argument("--batch_size", type=int, default=16)
+parser.add_argument("--epochs", type=int, default=3)
+parser.add_argument("--lr", type=float, default=1e-4)
 
 WEIGHTS_FILE = "results/gpt2-dpo.pt"
 
@@ -60,7 +62,7 @@ def eval_loss(val_loader, model, reference, device):
     
     return sum(losses) / len(losses), sum(margins) / len(margins)
 
-def train(train_loader, val_loader, model, reference, optimizer, enc, device):
+def train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs):
     model.train()
     
     
@@ -73,14 +75,17 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
     
     num_batches = len(train_loader)
     
-    scheduler = CosineAnnealingLR(optimizer, T_max = num_batches * EPOCHS, eta_min=1e-7)
+    scheduler = CosineAnnealingLR(optimizer, T_max = num_batches * epochs, eta_min=1e-7)
     
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, epochs + 1):
+        print ("---------------- EPOCH {epoch} / {epochs} ----------------")
+
+        # Sample some completions from the model to check progress
         model.eval()
         prompts = ["The morning started with a surprise as", "The calm before the storm"]
         completions = test_samples(prompts, model, enc, device)
         for completion in completions:
-            print (completion)
+            print (f"Sample generation: {completion}")
         
         model.train()
         for i, batch in enumerate(train_loader):
@@ -113,6 +118,11 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
     return train_steps, train_losses, val_steps, val_losses, val_margins
 
 def main():
+    args = parser.parse_args()
+    bs = args.batch_size
+    epochs = args.epochs
+    lr = args.lr
+    
     seed = random.randint(0, 100000)
     torch.random.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -132,15 +142,15 @@ def main():
     enc = get_encoder()
     
     # Define optimizer
-    optimizer = Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = Adam(model.parameters(), lr=lr)
     
     # Get train/val dataloaders
     upenn_dataset = get_dataset('dataset/upenn_dataset.json', enc)
     train_set, val_set = get_val_split(upenn_dataset, 0.1)
-    train_loader = get_dataloaders(train_set, BATCH_SIZE)
-    val_loader = get_dataloaders(val_set, BATCH_SIZE, shuffle=False)
+    train_loader = get_dataloaders(train_set, bs)
+    val_loader = get_dataloaders(val_set, bs, shuffle=False)
     
-    train_steps, train_losses, val_steps, val_losses, val_margins = train(train_loader, val_loader, model, reference, optimizer, enc, device)
+    train_steps, train_losses, val_steps, val_losses, val_margins = train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs)
     
     # Save the trained model
     torch.save(model.state_dict(), WEIGHTS_FILE)
