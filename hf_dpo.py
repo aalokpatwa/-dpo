@@ -3,7 +3,6 @@ from trl import DPOTrainer
 from datasets import load_dataset
 from trl import DPOTrainer, DPOConfig
 import os
-import torch
 from transformers import pipeline
 
 MODEL_NAME = "gpt2"

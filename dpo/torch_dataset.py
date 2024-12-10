@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset, DataLoader, random_split
 import torch
 import json
-from encoder import Encoder
+from .encoder import Encoder
 
 class DPODataset(Dataset):
     def __init__(self, json_file: str, enc: Encoder):
@@ -81,9 +81,14 @@ def custom_collate_fn(
 
     return batch_data
 
-def get_dataloaders(json_file: str, enc: Encoder, batch_size: int):
+def get_dataset(json_file: str, enc: Encoder):
     dataset = DPODataset(json_file, enc)
-    train_set, val_set = random_split(dataset, [0.9, 0.1])
-    train_loader = DataLoader(train_set, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False)
-    return train_loader, val_loader
+    return dataset
+
+def get_val_split(dataset: DPODataset, val_size: float):
+    train_set, val_set = random_split(dataset, [1-val_size, val_size])
+    return train_set, val_set
+
+def get_dataloaders(dataset: DPODataset, batch_size: int, shuffle: bool = True):
+    loader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=True)
+    return loader

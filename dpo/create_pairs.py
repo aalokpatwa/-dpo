@@ -23,7 +23,7 @@ client = OpenAI()
 
 results = []
 
-num_iterations = 300
+num_iterations = 30
 
 prompt = """I need you to help me create a DPO dataset. 
 I am trying to train a model to respond to every prompt with something involving the University of Pennsylvania.
@@ -72,6 +72,6 @@ for i in tqdm(range(num_iterations)):
 
 print (f"Gathered {len(results)} examples.")
 print ("Saving results to file.")
-with open("upenn_dataset.json", "w") as f:
+with open("upenn_test.json", "w") as f:
     json.dump(results, f)
     

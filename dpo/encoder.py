@@ -1,9 +1,9 @@
 """Byte pair encoding utilities"""
 
-import os
 import json
 import regex as re
 from functools import lru_cache
+import os
 
 @lru_cache()
 def bytes_to_unicode():
@@ -105,9 +105,12 @@ class Encoder:
         return text
 
 def get_encoder():
-    with open('./encoder.json', 'r') as f:
+    dir = os.path.dirname(os.path.abspath(__file__))
+    encoder_path = os.path.join(dir, "encoder.json")
+    bpe_path = os.path.join(dir, "vocab.bpe")
+    with open(encoder_path, 'r') as f:
         encoder = json.load(f)
-    with open('./vocab.bpe', 'r', encoding="utf-8") as f:
+    with open(bpe_path, 'r', encoding="utf-8") as f:
         bpe_data = f.read()
     bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
     return Encoder(

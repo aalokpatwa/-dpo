@@ -5,6 +5,7 @@
 '''
 import logging
 from matplotlib import pyplot as plt
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,19 @@ def load_weight(model, state_dict):
     # Make sure we are still sharing the output and input embeddings after loading weights
     return model
 
-def save_plots(train_steps, train_losses, val_steps, val_losses):
+def test_samples(prompts, model, enc, device):
+    out_completions = []
+    for text in prompts:
+        encoded = enc.encode(text)
+        context = torch.tensor(encoded, device=device, dtype=torch.long).unsqueeze(0)
+        completion = model.generate(context)
+        out = completion[0, :].tolist()
+        out = enc.decode(out)
+        out_completions.append(out)
+        
+    return out_completions
+
+def save_plots(train_steps, train_losses, val_steps, val_losses, val_margins, path):
     plt.figure(figsize=(9, 6))
     
     plt.plot(train_steps, train_losses, label="Train Loss", color="blue")
@@ -61,11 +74,11 @@ def save_plots(train_steps, train_losses, val_steps, val_losses):
     plt.ylabel("DPO Loss")
     plt.title("Training and Validation Loss")
     
-    plt.savefig("loss_plot.png")
+    plt.savefig(path + "/loss_plot.png")
     
-    # plt.figure(figsize=(9, 6))
-    # plt.plot(val_steps, val_margins, label="Validation Margin", color="green")
-    # plt.xlabel("Training steps")
-    # plt.ylabel("Reward Margin")
+    plt.figure(figsize=(9, 6))
+    plt.plot(val_steps, val_margins, label="Validation Margin", color="green")
+    plt.xlabel("Training steps")
+    plt.ylabel("Reward Margin")
     
-    # plt.savefig("margin_plot.png")
+    plt.savefig(path + "/margin_plot.png")

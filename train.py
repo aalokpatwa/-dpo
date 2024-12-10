@@ -1,19 +1,19 @@
-from torch.optim import Adam
-from encoder import get_encoder
-from torch_dataset import get_dataloaders
-from dpo import logprobs, dpo_loss
-from model import GPT, GPTConfig
-from utils import save_plots
+from dpo.encoder import get_encoder
+from dpo.torch_dataset import get_dataset, get_val_split, get_dataloaders
+from dpo.dpo import logprobs, dpo_loss
+from dpo.model import GPT, GPTConfig
+from dpo.utils import save_plots, test_samples
+
 import torch
+from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import random
-import numpy as np
 
 BATCH_SIZE = 8
 EPOCHS = 5
 LEARNING_RATE = 1e-4
 
-WEIGHTS_FILE = "gpt2-pytorch_model.bin"
+WEIGHTS_FILE = "results/gpt2-dpo.pt"
 
 def process_batch(batch, model, reference, device):
     chosen = batch["chosen"]
@@ -50,22 +50,15 @@ def eval_loss(val_loader, model, reference, device):
     model.eval()
     
     losses = []
+    margins = []
     
     with torch.no_grad():
         for i, batch in enumerate(val_loader):
             loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device)
             losses.append(loss.item())
+            margins.append(chosen_reward - rejected_reward)
     
-    return np.mean(np.array(losses))
-
-def test_samples(prompts, model, enc, device):
-    for text in prompts:
-        encoded = enc.encode(text)
-        context = torch.tensor(encoded, device=device, dtype=torch.long).unsqueeze(0)
-        completion = model.generate(context)
-        out = completion[0, :].tolist()
-        out = enc.decode(out)
-        print (f"Completion: {out}")
+    return sum(losses) / len(losses), sum(margins) / len(margins)
 
 def train(train_loader, val_loader, model, reference, optimizer, enc, device):
     model.train()
@@ -76,6 +69,7 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
     
     val_steps = []
     val_losses = []
+    val_margins = []
     
     num_batches = len(train_loader)
     
@@ -84,7 +78,9 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
     for epoch in range(1, EPOCHS + 1):
         model.eval()
         prompts = ["The morning started with a surprise as", "The calm before the storm"]
-        test_samples(prompts, model, enc, device)
+        completions = test_samples(prompts, model, enc, device)
+        for completion in completions:
+            print (completion)
         
         model.train()
         for i, batch in enumerate(train_loader):
@@ -108,12 +104,13 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
             scheduler.step()
             
             if i % (num_batches // 2) == 0:
-                val_loss = eval_loss(val_loader, model, reference, device)
+                val_loss, val_margin = eval_loss(val_loader, model, reference, device)
                 val_losses.append(val_loss)
+                val_margins.append(val_margin)
                 val_steps.append(i + (epoch - 1) * num_batches)
                 print (f"Val loss: {val_loss}")
                 
-    return train_steps, train_losses, val_steps, val_losses
+    return train_steps, train_losses, val_steps, val_losses, val_margins
 
 def main():
     seed = random.randint(0, 100000)
@@ -137,11 +134,18 @@ def main():
     # Define optimizer
     optimizer = Adam(model.parameters(), lr=LEARNING_RATE)
     
-    # Define dataloader
-    train_loader, val_loader = get_dataloaders('upenn_dataset.json', enc, BATCH_SIZE)
+    # Get train/val dataloaders
+    upenn_dataset = get_dataset('dataset/upenn_dataset.json', enc)
+    train_set, val_set = get_val_split(upenn_dataset, 0.1)
+    train_loader = get_dataloaders(train_set, BATCH_SIZE)
+    val_loader = get_dataloaders(val_set, BATCH_SIZE, shuffle=False)
     
-    train_steps, train_losses, val_steps, val_losses = train(train_loader, val_loader, model, reference, optimizer, enc, device)
-    save_plots(train_steps, train_losses, val_steps, val_losses)
+    train_steps, train_losses, val_steps, val_losses, val_margins = train(train_loader, val_loader, model, reference, optimizer, enc, device)
+    
+    # Save the trained model
+    torch.save(model.state_dict(), WEIGHTS_FILE)
+    
+    save_plots(train_steps, train_losses, val_steps, val_losses, val_margins, "results")    
     
 if __name__ == '__main__':
     main()
