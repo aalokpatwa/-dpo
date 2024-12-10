@@ -11,7 +11,7 @@ import numpy as np
 
 BATCH_SIZE = 8
 EPOCHS = 5
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-5
 
 WEIGHTS_FILE = "gpt2-pytorch_model.bin"
 
@@ -63,7 +63,7 @@ def test_samples(prompts, model, enc, device):
         encoded = enc.encode(text)
         context = torch.tensor(encoded, device=device, dtype=torch.long).unsqueeze(0)
         completion = model.generate(context)
-        out = completion[0, len(completion):].tolist()
+        out = completion[0, :].tolist()
         out = enc.decode(out)
         print (f"Prompt: {text}")
         print (f"Completion: {out}")
@@ -79,13 +79,11 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
     scheduler = CosineAnnealingLR(optimizer, T_max = num_batches * EPOCHS, eta_min=1e-7)
     
     for epoch in range(1, EPOCHS + 1):
-        
         model.eval()
         prompts = ["The morning started with a surprise as", "The calm before the storm"]
         test_samples(prompts, model, enc, device)
         
         model.train()
-        
         for i, batch in enumerate(train_loader):
             optimizer.zero_grad()
 
@@ -93,7 +91,8 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
             loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device)
             
             print (f"Train Loss: {loss.item()}")
-            print (f"R margin: {chosen_reward - rejected_reward}")
+            print (f"Chosen reward: {chosen_reward}")
+            print (f"Rejected reward: {rejected_reward}")
             
             losses.append(loss.item())
             
