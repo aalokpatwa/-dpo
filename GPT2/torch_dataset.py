@@ -84,7 +84,6 @@ def custom_collate_fn(
 def get_dataloaders(json_file: str, enc: Encoder, batch_size: int):
     dataset = DPODataset(json_file, enc)
     train_set, val_set = random_split(dataset, [0.9, 0.1])
-    print (len(train_set), len(val_set))
     train_loader = DataLoader(train_set, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=True)
     val_loader = DataLoader(val_set, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False)
     return train_loader, val_loader

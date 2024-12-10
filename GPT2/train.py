@@ -3,15 +3,15 @@ from encoder import get_encoder
 from torch_dataset import get_dataloaders
 from dpo import logprobs, dpo_loss
 from model import GPT, GPTConfig
+from utils import save_plots
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import random
 import numpy as np
 
-
 BATCH_SIZE = 8
 EPOCHS = 5
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-4
 
 WEIGHTS_FILE = "gpt2-pytorch_model.bin"
 
@@ -65,16 +65,19 @@ def test_samples(prompts, model, enc, device):
         completion = model.generate(context)
         out = completion[0, :].tolist()
         out = enc.decode(out)
-        print (f"Prompt: {text}")
         print (f"Completion: {out}")
 
 def train(train_loader, val_loader, model, reference, optimizer, enc, device):
     model.train()
     
-    losses = []
+    
+    train_losses = []
+    train_steps = []
+    
+    val_steps = []
+    val_losses = []
     
     num_batches = len(train_loader)
-    print (f"Num batches: {num_batches}")
     
     scheduler = CosineAnnealingLR(optimizer, T_max = num_batches * EPOCHS, eta_min=1e-7)
     
@@ -94,7 +97,8 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
             print (f"Chosen reward: {chosen_reward}")
             print (f"Rejected reward: {rejected_reward}")
             
-            losses.append(loss.item())
+            train_steps.append(i + (epoch - 1) * num_batches)
+            train_losses.append(loss.item())
             
             # Backward pass
             loss.backward()
@@ -105,7 +109,11 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device):
             
             if i % (num_batches // 2) == 0:
                 val_loss = eval_loss(val_loader, model, reference, device)
+                val_losses.append(val_loss)
+                val_steps.append(i + (epoch - 1) * num_batches)
                 print (f"Val loss: {val_loss}")
+                
+    return train_steps, train_losses, val_steps, val_losses
 
 def main():
     seed = random.randint(0, 100000)
@@ -132,7 +140,8 @@ def main():
     # Define dataloader
     train_loader, val_loader = get_dataloaders('upenn_dataset.json', enc, BATCH_SIZE)
     
-    train(train_loader, val_loader, model, reference, optimizer, enc, device)
+    train_steps, train_losses, val_steps, val_losses = train(train_loader, val_loader, model, reference, optimizer, enc, device)
+    save_plots(train_steps, train_losses, val_steps, val_losses)
     
 if __name__ == '__main__':
     main()

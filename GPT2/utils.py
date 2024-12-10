@@ -51,7 +51,7 @@ def load_weight(model, state_dict):
     # Make sure we are still sharing the output and input embeddings after loading weights
     return model
 
-def save_plots(train_steps, train_losses, val_steps, val_losses, val_margins):
+def save_plots(train_steps, train_losses, val_steps, val_losses):
     plt.figure(figsize=(9, 6))
     
     plt.plot(train_steps, train_losses, label="Train Loss", color="blue")
@@ -63,9 +63,9 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_margins):
     
     plt.savefig("loss_plot.png")
     
-    plt.figure(figsize=(9, 6))
-    plt.plot(val_steps, val_margins, label="Validation Margin", color="green")
-    plt.xlabel("Training steps")
-    plt.ylabel("Reward Margin")
+    # plt.figure(figsize=(9, 6))
+    # plt.plot(val_steps, val_margins, label="Validation Margin", color="green")
+    # plt.xlabel("Training steps")
+    # plt.ylabel("Reward Margin")
     
-    plt.savefig("margin_plot.png")
+    # plt.savefig("margin_plot.png")
