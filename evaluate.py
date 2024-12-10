@@ -13,6 +13,7 @@ def main():
     config = GPTConfig()
     model = GPT(config)
     model.load_state_dict(torch.load(PATH, weights_only=False, map_location=device))
+    model = model.to(device)
     model.eval()
     
     enc = get_encoder()

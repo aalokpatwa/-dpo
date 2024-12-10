@@ -6,6 +6,7 @@ def test_samples(prompts, model, enc, device):
     for text in prompts:
         encoded = enc.encode(text)
         context = torch.tensor(encoded, device=device, dtype=torch.long).unsqueeze(0)
+        context = context.to(device)
         completion = model.generate(context)
         out = completion[0, :].tolist()
         out = enc.decode(out)
@@ -21,7 +22,7 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_margins, pa
     plt.legend()
     plt.xlabel("Training steps")
     plt.ylabel("DPO Loss")
-    plt.title("Training and Validation Loss")
+    plt.title("Loss of DPO on GPT-2 (PyTorch Implementation)")
     
     plt.savefig(path + "/loss_plot.png")
     
@@ -29,5 +30,6 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_margins, pa
     plt.plot(val_steps, val_margins, label="Validation Margin", color="green")
     plt.xlabel("Training steps")
     plt.ylabel("Reward Margin")
+    plt.title("Margin of DPO on GPT-2 (PyTorch Implementation)")
     
     plt.savefig(path + "/margin_plot.png")

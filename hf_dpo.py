@@ -1,12 +1,13 @@
 import transformers
-from trl import DPOTrainer
-from datasets import load_dataset
-from trl import DPOTrainer, DPOConfig
-import os
 from transformers import pipeline
+from trl import DPOTrainer, DPOConfig
+from datasets import load_dataset
+import os
+import csv
+import json
 
 MODEL_NAME = "gpt2"
-DATASET_NAME = "upenn_dataset"
+DATASET_NAME = "dataset/upenn_dataset"
 TEST_SIZE = 0.1
 PROMPTS = ["Once upon a time", "In a galaxy far far away", "It was a dark and stormy night"]
 SAVED_MODEL = "gpt2_dpo"
@@ -55,6 +56,21 @@ def main():
         generated_text = generator(text, max_length=50, do_sample=True, top_p=0.8)[0]['generated_text']
         print (f"Prompt: {text}")
         print (f"Completion: {generated_text}")
+        
+        
+    test_set = json.loads(open('dataset/upenn_test.json').read())
+    prompts = [pair["prompt"] for pair in test_set]
+
+    with open('hf_results.csv', 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(["prompt", "completion"])
+
+        for prompt in prompts:
+
+            generated_text = generator(prompt, max_length=50, do_sample=True, top_k=30)[0]['generated_text']
+            print (f"Completion: {generated_text}")
+
+            writer.writerow([prompt, generated_text])
         
         
 if __name__ == "__main__":
