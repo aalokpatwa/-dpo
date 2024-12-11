@@ -62,6 +62,6 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewa
     plt.legend()
     plt.xlabel("Training steps")
     plt.ylabel("Rewards (logratios between actor and reference)")
-    plt.title("Margin of DPO on GPT-2 (PyTorch Implementation)")
+    plt.title("Rewards during Training")
     
-    plt.savefig(path + "/margin_plot.png")
+    plt.savefig(path + "/rewards_plot.png")
