@@ -46,7 +46,7 @@ def logprobs(logits, labels, mask):
 
     return avg_log_prob
 
-def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, reference_rejected_logp, beta, use_dpop):
+def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, reference_rejected_logp, beta):
     """ Computes the DPO objective according to the the paper.
 
     Args:
@@ -64,13 +64,49 @@ def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, refe
     chosen_rewards = beta * (model_chosen_logp - reference_chosen_logp)
     rejected_rewards = beta * (model_rejected_logp - reference_rejected_logp)
     
-    logratio = torch.max(torch.zeros_like(model_chosen_logp), reference_chosen_logp - model_chosen_logp)
-    
-    if use_dpop:
-        dpop_component = beta * (model_chosen_logp - reference_chosen_logp - LAMBDA * logratio)
-        loss = -F.logsigmoid((dpop_component - rejected_rewards)).mean()
-    else:
-        loss = -F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
+    loss = -F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
     
     return loss, chosen_rewards.cpu().detach().numpy().mean(), rejected_rewards.cpu().detach().numpy().mean()
+
+def dpop_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, reference_rejected_logp, beta):
+    """ Computes the DPOP objective, which forces the logratio of chosen examples to remain positive.
+
+    Args:
+        model_chosen_logp (float): Log-prob given to chosen response by actor model. (B,)
+        model_rejected_logp (float): Log-prob given to rejected response by actor model. (B,)
+        reference_chosen_logp (float): Log-prob given to chosen response by reference model. (B,)
+        reference_rejected_logp (float): Log-prob given to rejected response by reference model. (B,)
+        beta (float): Hyperparameter controlling how much the model adheres to the reference.
+    Returns:
+        loss: The overall DPOP loss, which we will use for the gradient. Scalar.
+        chosen_rewards: Mean reward of chosen responses in the batch. Scalar.
+        rejected_rewards: Mean reward of rejected responses in the batch. Scalar.
+    """    
+    chosen_rewards = beta * (model_chosen_logp - reference_chosen_logp)
+    rejected_rewards = beta * (model_rejected_logp - reference_rejected_logp)
     
+    logratio = torch.max(torch.zeros_like(model_chosen_logp), reference_chosen_logp - model_chosen_logp)
+    
+    dpop_component = beta * (model_chosen_logp - reference_chosen_logp - LAMBDA * logratio)
+    loss = -F.logsigmoid((dpop_component - rejected_rewards)).mean()
+    
+    return loss, chosen_rewards.cpu().detach().numpy().mean(), rejected_rewards.cpu().detach().numpy().mean()
+
+def sft(logits, labels, mask):
+    # Shift labels right by one since those are the ground-truths
+    labels = labels[:, 1:].clone()
+    selection_mask = mask[:, 1:].clone()
+    
+    labels[selection_mask == 0] = -1
+
+    # Truncate logits, since last one won't have a ground-truth
+    logits = logits[:, :-1, :]
+        
+    loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), labels.reshape(-1), ignore_index=-1)
+    
+    return loss
+
+def kl_sft(model_chosen_logp, reference_chosen_logp, lambd):
+    loss = -model_chosen_logp.mean() + lambd * torch.pow((model_chosen_logp - reference_chosen_logp), 2).mean()
+    
+    return loss

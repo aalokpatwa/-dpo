@@ -4,7 +4,7 @@ Trains a GPT-2 model using DPO on a provided dataset.
 
 from dpo.encoder import get_encoder
 from dpo.torch_dataset import get_dataset, get_val_split, get_dataloaders
-from dpo.dpo import logprobs, dpo_loss
+from dpo.loss import logprobs, dpo_loss, dpop_loss, sft, kl_sft
 from dpo.model import GPT, GPTConfig
 from dpo.utils import save_plots, test_samples
 
@@ -24,7 +24,7 @@ parser.add_argument("--dataset", type=str, default="dataset/upenn_dataset.json")
 parser.add_argument("--results_dir", type=str, default="results")
 parser.add_argument("--loss", type=str, default="dpop")
 
-def forward_pass_batch(batch, model, reference, device, beta, use_dpop):
+def forward_pass_batch(batch, model, reference, device, beta, loss_fn):
     chosen = batch["chosen"]
     rejected = batch["rejected"]
     chosen_mask = batch["chosen_mask"]
@@ -48,14 +48,35 @@ def forward_pass_batch(batch, model, reference, device, beta, use_dpop):
     chosen_reference_logprobs = logprobs(chosen_reference_logits, chosen, chosen_mask)
     rejected_reference_logprobs = logprobs(rejected_reference_logits, rejected, rejected_mask)
     
-    loss, chosen_rewards, rejected_rewards = dpo_loss(
-        chosen_policy_logprobs, rejected_policy_logprobs,
-        chosen_reference_logprobs, rejected_reference_logprobs, beta, use_dpop
-    )
+    if loss_fn == "dpop":
+        loss, chosen_rewards, rejected_rewards = dpop_loss(
+            chosen_policy_logprobs, rejected_policy_logprobs,
+            chosen_reference_logprobs, rejected_reference_logprobs, beta
+        )
+        return loss, chosen_rewards, rejected_rewards
     
-    return loss, chosen_rewards, rejected_rewards
+    elif loss_fn == "dpo":
+        loss, chosen_rewards, rejected_rewards = dpo_loss(
+            chosen_policy_logprobs, rejected_policy_logprobs,
+            chosen_reference_logprobs, rejected_reference_logprobs, beta
+        )
+        return loss, chosen_rewards, rejected_rewards
+    
+    elif loss_fn == "sft":
+        loss = sft(
+            chosen_policy_logits, chosen, chosen_mask
+        )
+        
+        return loss, None, None
 
-def eval_loss(val_loader, model, reference, device, beta, use_dpop):
+    elif loss_fn == "kl_sft":
+        loss = kl_sft(
+            chosen_policy_logprobs, rejected_policy_logprobs, 0.1
+        )
+        
+        return loss, None, None
+
+def eval_loss(val_loader, model, reference, device, beta, loss_fn):
     model.eval()
     
     losses = []
@@ -64,16 +85,23 @@ def eval_loss(val_loader, model, reference, device, beta, use_dpop):
     margins = []
     
     with torch.no_grad():
-        for i, batch in enumerate(val_loader):
-            loss, chosen_reward, rejected_reward = forward_pass_batch(batch, model, reference, device, beta, use_dpop)
+        for batch in val_loader:
+            loss, chosen_reward, rejected_reward = forward_pass_batch(batch, model, reference, device, beta, loss_fn)
             losses.append(loss.item())
-            chosen.append(chosen_reward)
-            rejected.append(rejected_reward)
-            margins.append(chosen_reward - rejected_reward)
+            
+            if loss_fn == "dpo" or loss_fn == "dpop":
+                chosen.append(chosen_reward)
+                rejected.append(rejected_reward)
+                margins.append(chosen_reward - rejected_reward)
+            
+            else:
+                chosen.append(0)
+                rejected.append(0)
+                margins.append(0)
     
     return sum(losses) / len(losses), sum(chosen) / len(chosen), sum(rejected) / len(rejected), sum(margins) / len(margins)
 
-def train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta, use_dpop):
+def train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta, loss_fn):
     
     train_losses = []
     train_steps = []
@@ -102,7 +130,11 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device, ep
         for i, batch in enumerate(train_loader):
             optimizer.zero_grad()
 
-            loss, chosen_reward, rejected_reward = forward_pass_batch(batch, model, reference, device, beta, use_dpop)
+            loss, chosen_reward, rejected_reward = forward_pass_batch(batch, model, reference, device, beta, loss_fn)
+            
+            if chosen_reward is None:
+                chosen_reward = torch.Tensor([0])
+                rejected_reward = torch.Tensor([0])
             
             print (f"Step {i+1}/{num_batches} | Loss: {round(loss.item(), 5)} | Chosen r: {round(chosen_reward.item(), 4)} | Rejected r: {round(rejected_reward.item(), 4)}")
             
@@ -117,7 +149,7 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device, ep
             scheduler.step()
             
             if i % (num_batches // 8) == 0:
-                val_loss, r_chosen, r_rejected, val_margin = eval_loss(val_loader, model, reference, device, beta, use_dpop)
+                val_loss, r_chosen, r_rejected, val_margin = eval_loss(val_loader, model, reference, device, beta, loss_fn)
                 val_losses.append(val_loss)
                 val_chosen_rewards.append(r_chosen)
                 val_rejected_rewards.append(r_rejected)
@@ -135,7 +167,7 @@ def main():
     beta = args.beta
     dataset = args.dataset
     results_dir = args.results_dir
-    use_dpop = True if args.loss == "dpop" else False
+    loss_fn = args.loss
     
     WEIGHTS_FILE = results_dir + "/gpt2-dpo.pt"
     
@@ -169,7 +201,7 @@ def main():
     print (f"Starting training with {len(train_set)} training samples and {args.loss} loss.")
     
     train_steps, train_losses, val_steps, val_losses, val_chosen_rewards, val_rejected_rewards, val_margins = train(
-        train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta, use_dpop
+        train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta, loss_fn
     )
     
     if not os.path.exists(results_dir):
@@ -178,7 +210,7 @@ def main():
     # Save the trained model
     torch.save(model.state_dict(), WEIGHTS_FILE)
     
-    save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewards, val_rejected_rewards, val_margins, results_dir)    
+    save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewards, val_rejected_rewards, val_margins, results_dir + "/" + loss_fn)    
     
 if __name__ == '__main__':
     main()
