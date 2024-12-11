@@ -1,3 +1,7 @@
+"""
+Trains a GPT-2 model using DPO on a provided dataset.
+"""
+
 from dpo.encoder import get_encoder
 from dpo.torch_dataset import get_dataset, get_val_split, get_dataloaders
 from dpo.dpo import logprobs, dpo_loss
@@ -13,13 +17,14 @@ import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", type=int, default=16)
-parser.add_argument("--epochs", type=int, default=3)
+parser.add_argument("--epochs", type=int, default=2)
 parser.add_argument("--lr", type=float, default=1e-4)
-parser.add_argument("--beta", type=float, default=0.1)
+parser.add_argument("--beta", type=float, default=0.5)
+parser.add_argument("--dataset", type=str, default="dataset/upenn_dataset.json")
+parser.add_argument("--results_dir", type=str, default="results")
+parser.add_argument("--loss", type=str, default="dpop")
 
-WEIGHTS_FILE = "results/gpt2-dpo.pt"
-
-def process_batch(batch, model, reference, device, beta):
+def forward_pass_batch(batch, model, reference, device, beta, use_dpop):
     chosen = batch["chosen"]
     rejected = batch["rejected"]
     chosen_mask = batch["chosen_mask"]
@@ -45,34 +50,38 @@ def process_batch(batch, model, reference, device, beta):
     
     loss, chosen_rewards, rejected_rewards = dpo_loss(
         chosen_policy_logprobs, rejected_policy_logprobs,
-        chosen_reference_logprobs, rejected_reference_logprobs, beta
+        chosen_reference_logprobs, rejected_reference_logprobs, beta, use_dpop
     )
     
     return loss, chosen_rewards, rejected_rewards
 
-def eval_loss(val_loader, model, reference, device, beta):
+def eval_loss(val_loader, model, reference, device, beta, use_dpop):
     model.eval()
     
     losses = []
+    chosen = []
+    rejected = []
     margins = []
     
     with torch.no_grad():
         for i, batch in enumerate(val_loader):
-            loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device, beta)
+            loss, chosen_reward, rejected_reward = forward_pass_batch(batch, model, reference, device, beta, use_dpop)
             losses.append(loss.item())
+            chosen.append(chosen_reward)
+            rejected.append(rejected_reward)
             margins.append(chosen_reward - rejected_reward)
     
-    return sum(losses) / len(losses), sum(margins) / len(margins)
+    return sum(losses) / len(losses), sum(chosen) / len(chosen), sum(rejected) / len(rejected), sum(margins) / len(margins)
 
-def train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta):
-    model.train()
-    
+def train(train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta, use_dpop):
     
     train_losses = []
     train_steps = []
     
     val_steps = []
     val_losses = []
+    val_chosen_rewards = []
+    val_rejected_rewards = []
     val_margins = []
     
     num_batches = len(train_loader)
@@ -93,9 +102,9 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device, ep
         for i, batch in enumerate(train_loader):
             optimizer.zero_grad()
 
-            loss, chosen_reward, rejected_reward = process_batch(batch, model, reference, device, beta)
+            loss, chosen_reward, rejected_reward = forward_pass_batch(batch, model, reference, device, beta, use_dpop)
             
-            print (f"Step {i+1}/{num_batches} | Loss: {round(loss.item(), 5)} | Chosen r: {round(chosen_reward, 4)} | Rejected r: {round(rejected_reward, 4)}")
+            print (f"Step {i+1}/{num_batches} | Loss: {round(loss.item(), 5)} | Chosen r: {round(chosen_reward.item(), 4)} | Rejected r: {round(rejected_reward.item(), 4)}")
             
             train_steps.append(i + (epoch - 1) * num_batches)
             train_losses.append(loss.item())
@@ -108,13 +117,15 @@ def train(train_loader, val_loader, model, reference, optimizer, enc, device, ep
             scheduler.step()
             
             if i % (num_batches // 8) == 0:
-                val_loss, val_margin = eval_loss(val_loader, model, reference, device, beta)
+                val_loss, r_chosen, r_rejected, val_margin = eval_loss(val_loader, model, reference, device, beta, use_dpop)
                 val_losses.append(val_loss)
+                val_chosen_rewards.append(r_chosen)
+                val_rejected_rewards.append(r_rejected)
                 val_margins.append(val_margin)
                 val_steps.append(i + (epoch - 1) * num_batches)
                 print (f"Val loss: {val_loss}")
                 
-    return train_steps, train_losses, val_steps, val_losses, val_margins
+    return train_steps, train_losses, val_steps, val_losses, val_chosen_rewards, val_rejected_rewards, val_margins
 
 def main():
     args = parser.parse_args()
@@ -122,6 +133,11 @@ def main():
     epochs = args.epochs
     lr = args.lr
     beta = args.beta
+    dataset = args.dataset
+    results_dir = args.results_dir
+    use_dpop = True if args.loss == "dpop" else False
+    
+    WEIGHTS_FILE = results_dir + "/gpt2-dpo.pt"
     
     seed = random.randint(0, 100000)
     torch.random.manual_seed(seed)
@@ -145,22 +161,24 @@ def main():
     optimizer = Adam(model.parameters(), lr=lr)
     
     # Get train/val dataloaders
-    upenn_dataset = get_dataset('dataset/upenn_dataset.json', enc)
+    upenn_dataset = get_dataset(dataset, enc)
     train_set, val_set = get_val_split(upenn_dataset, 0.1)
     train_loader = get_dataloaders(train_set, bs)
     val_loader = get_dataloaders(val_set, bs, shuffle=False)
     
-    train_steps, train_losses, val_steps, val_losses, val_margins = train(
-        train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta
+    print (f"Starting training with {len(train_set)} training samples and {args.loss} loss.")
+    
+    train_steps, train_losses, val_steps, val_losses, val_chosen_rewards, val_rejected_rewards, val_margins = train(
+        train_loader, val_loader, model, reference, optimizer, enc, device, epochs, beta, use_dpop
     )
     
-    if not os.path.exists("results"):
-        os.makedirs("results")
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
     
     # Save the trained model
     torch.save(model.state_dict(), WEIGHTS_FILE)
     
-    save_plots(train_steps, train_losses, val_steps, val_losses, val_margins, "results")    
+    save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewards, val_rejected_rewards, val_margins, results_dir)    
     
 if __name__ == '__main__':
     main()

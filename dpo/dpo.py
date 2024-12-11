@@ -46,7 +46,7 @@ def logprobs(logits, labels, mask):
 
     return avg_log_prob
 
-def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, reference_rejected_logp, beta):
+def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, reference_rejected_logp, beta, use_dpop):
     """ Computes the DPO objective according to the the paper.
 
     Args:
@@ -55,6 +55,7 @@ def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, refe
         reference_chosen_logp (float): Log-prob given to chosen response by reference model. (B,)
         reference_rejected_logp (float): Log-prob given to rejected response by reference model. (B,)
         beta (float): Hyperparameter controlling how much the model adheres to the reference.
+        use_dpop (bool): True if we want to use DPOP loss, otherwise DPO loss
     Returns:
         loss: The overall DPO loss, which we will use for the gradient. Scalar.
         chosen_rewards: Mean reward of chosen responses in the batch. Scalar.
@@ -65,9 +66,11 @@ def dpo_loss(model_chosen_logp, model_rejected_logp, reference_chosen_logp, refe
     
     logratio = torch.max(torch.zeros_like(model_chosen_logp), reference_chosen_logp - model_chosen_logp)
     
-    dpop_component = beta * (model_chosen_logp - reference_chosen_logp - LAMBDA * logratio)
+    if use_dpop:
+        dpop_component = beta * (model_chosen_logp - reference_chosen_logp - LAMBDA * logratio)
+        loss = -F.logsigmoid((dpop_component - rejected_rewards)).mean()
+    else:
+        loss = -F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
     
-    #loss = -F.logsigmoid((chosen_rewards - rejected_rewards)).mean()
-    loss = -F.logsigmoid((dpop_component - rejected_rewards)).mean()
     return loss, chosen_rewards.cpu().detach().numpy().mean(), rejected_rewards.cpu().detach().numpy().mean()
     

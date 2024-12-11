@@ -2,6 +2,25 @@ from matplotlib import pyplot as plt
 import torch
 
 def test_samples(prompts, model, enc, device):
+    """
+    Test a model on a list of prompts by generating completions.
+    
+    Parameters
+    ----------
+    prompts : list of str
+        The list of prompts to test on.
+    model : torch.nn.Module
+        The model to test.
+    enc : dpo.Encoder
+        The encoder to use.
+    device : torch.device
+        The device to use.
+    
+    Returns
+    -------
+    out_completions : list of str
+        The generated completions.
+    """
     out_completions = []
     for text in prompts:
         encoded = enc.encode(text)
@@ -14,7 +33,10 @@ def test_samples(prompts, model, enc, device):
         
     return out_completions
 
-def save_plots(train_steps, train_losses, val_steps, val_losses, val_margins, path):
+def save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewards, val_rejected_rewards, val_margins, path):
+    """
+    Saves plots of the loss and rewards of a DPO training run.
+    """
     plt.figure(figsize=(9, 6))
     
     plt.plot(train_steps, train_losses, label="Train Loss", color="blue")
@@ -27,9 +49,19 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_margins, pa
     plt.savefig(path + "/loss_plot.png")
     
     plt.figure(figsize=(9, 6))
-    plt.plot(val_steps, val_margins, label="Validation Margin", color="green")
+    plt.plot(val_steps, val_margins, label="Validation Margin", color="orange")
     plt.xlabel("Training steps")
     plt.ylabel("Reward Margin")
+    plt.title("Margin of DPO on GPT-2 (PyTorch Implementation)")
+    
+    plt.savefig(path + "/margin_plot.png")
+    
+    plt.figure(figsize=(9, 6))
+    plt.plot(val_steps, val_chosen_rewards, label="Chosen Response Reward", color="green")
+    plt.plot(val_steps, val_rejected_rewards, label="Rejected Response Reward", color="red")
+    plt.legend()
+    plt.xlabel("Training steps")
+    plt.ylabel("Rewards (logratios between actor and reference)")
     plt.title("Margin of DPO on GPT-2 (PyTorch Implementation)")
     
     plt.savefig(path + "/margin_plot.png")
