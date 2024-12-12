@@ -9,6 +9,10 @@ from dotenv import load_dotenv
 import os
 from threading import Thread
 import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt
+import seaborn as sns
+from time import sleep
 
 load_dotenv()
 
@@ -18,10 +22,8 @@ def main():
 
     client = OpenAI()
 
-    completions_1 = pd.read_csv("dpop_results.csv")
-    completions_2 = pd.read_csv("results.csv")
-
-    prompt = """I will give you two pieces of text. Simply answer with which response seems more coherent and realistic.
+    prompt = """I will give you two pieces of text, numbered 1 and 2. Answer with which response seems more coherent and realistic. Do not take which response is first in the prompt into account.
+    Base your answer only on the quality of the response -- coherence, grammar, and realism.
     Give your answer in JSON with a single key "winner" with a value of either 1 or 2.
 
     Example:
@@ -51,30 +53,45 @@ def main():
         else:
             results[i] = 0
 
-    i = 0
-    dpo_wins = 0
+    choices = ["sft", "kl_sft", "dpop", "dpo", "hf"]
+    
+    result_matrix = np.zeros((len(choices), len(choices)))
 
-    while i < len(completions_1):
-        threads = []
-        results = [0] * 5
-        for j in range(i, i+5):
-            completion_1 = completions_1.iloc[j]["completion"]
-            completion_2 = completions_2.iloc[j]["completion"]
-            thread = Thread(target=get_responses, args=(prompt, completion_1, completion_2, results, j - i))
-            threads.append(thread)
-            thread.start()
-        
-        i += 5
-        
-        for t in threads:
-            t.join()
-            
-        print (results)
-            
-        dpo_wins += sum(results)
+    for i in range(len(choices)):
+        for j in range(i+1, len(choices)):
+            print (choices[i], choices[j])
+            completions_1 = pd.read_csv(f"results/{choices[i]}_results.csv")
+            completions_2 = pd.read_csv(f"results/{choices[j]}_results.csv")
 
-    print (f"Checked {len(completions_1)} examples.")
-    print (f"Win rate of dpo examples: {round(dpo_wins / len(completions_1), 3)}")
+            k = 0
+            first_wins = 0
+
+            while k < len(completions_1):
+                threads = []
+                results = [0] * 5
+                for l in range(k, k+5):
+                    completion_1 = completions_1.iloc[l]["completion"]
+                    completion_2 = completions_2.iloc[l]["completion"]
+                    thread = Thread(target=get_responses, args=(prompt, completion_1, completion_2, results, l - k))
+                    threads.append(thread)
+                    thread.start()
+                
+                k += 5
+                
+                for t in threads:
+                    t.join()
+                                    
+                first_wins += sum(results)
+                
+                sleep(1)
+            
+            win_rate = first_wins / len(completions_1)
+            result_matrix[i][j] = win_rate
+            result_matrix[j][i] = 1 - win_rate
+            
+    sns.heatmap(result_matrix, annot=True, xticklabels=choices, yticklabels=choices, cmap="RdYlGn")
+    plt.savefig("results/win_table.png", dpi=300)
+    
     
 if __name__ == "__main__":
     main()

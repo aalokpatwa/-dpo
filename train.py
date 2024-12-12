@@ -169,7 +169,7 @@ def main():
     results_dir = args.results_dir
     loss_fn = args.loss
     
-    WEIGHTS_FILE = results_dir + "/gpt2-dpo.pt"
+    WEIGHTS_FILE = f"{results_dir}/gpt2-{loss_fn}.pt"
     
     seed = random.randint(0, 100000)
     torch.random.manual_seed(seed)

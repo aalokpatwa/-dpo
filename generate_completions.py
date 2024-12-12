@@ -8,10 +8,19 @@ from dpo.encoder import get_encoder
 import torch
 import json
 import csv
+import argparse
 
-PATH = "results/gpt2-dpo.pt"
+parser = argparse.ArgumentParser()
+parser.add_argument("--model", type=str, required=True, options=["dpo", "dpop", "sft", "kl_sft"], default="dpop")
+parser.add_argument("--results_dir", type=str, default="results")
 
 def main():
+    args = parser.parse_args()
+    results_dir = args.results_dir
+    model = args.model
+    
+    PATH = f"{results_dir}/gpt2-{model}.pt"
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Define the model architecture

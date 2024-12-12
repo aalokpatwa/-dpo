@@ -1,5 +1,5 @@
 """
-Checks whether responses generated from a DPO-tuned model actually contain UPenn references.
+Assesses degree of alignment by checking whether responses generated from a DPO-tuned model actually contain UPenn references.
 Uses GPT-4 with a simple prompt.
 """
 import openai
@@ -18,7 +18,7 @@ def main():
 
     client = OpenAI()
 
-    completions_csv = pd.read_csv("results.csv")
+    completions_csv = pd.read_csv("results/dpo_results.csv")
 
     prompt = """I will give you a piece of text. Simply tell me whether the response contains a reference to the University of Pennsylvania.
     Give your answer in JSON with a single key with a boolean value: "references".
@@ -45,6 +45,8 @@ def main():
             return
         
         grade = json_result["references"]
+        if grade == False:
+            print (completion)
         results[i] = grade * 1
 
     i = 0
