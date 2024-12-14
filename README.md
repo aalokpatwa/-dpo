@@ -2,7 +2,7 @@
 
 This repository contains code for aligning GPT-2 124M using DPO, and also performing SFT using the same DPO dataset.
 
-Credit to @karpathy for the GPT-2 PyTorch architecture.
+Credit to @karpathy for the GPT-2 PyTorch architecture and @graykode for the custom tokenizer.
 
 ## Installation
 ```
@@ -32,7 +32,7 @@ python generate_completions.py [--dataset] [--model] [--results_dir]
 Example: python3 generate_completions.py --dataset dataset/upenn_test.json --model dpop
 ```
 
-After this, if you would like to evaluate the generations using GPT-4, create a `.env.` file in the root and add your OpenAI API key.
+After this, if you would like to evaluate the generations using GPT-4, create a `.env` file in the root and add your OpenAI API key.
 Then, you can run
 ```
 python alignment_accuracies.py [--results_file]
@@ -42,5 +42,8 @@ Example:
 python alignment_accuracies.py --results_file results/dpop_results.csv
 python win_rates.py --results_files results/dpo_results.csv,results/dpop_results.csv,results/hf_results.csv
 ```
+
+## Key Files
+The training loop is in `train.py`, the model architecture is in `dpo/model.py`, and the loss functions are in `dpo/loss.py`.
 
 
