@@ -46,7 +46,7 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewa
     plt.ylabel("DPO Loss")
     plt.title("Loss during Training")
     
-    plt.savefig(path + "loss_plot.png")
+    plt.savefig(path + "loss_plot.png", dpi=300)
     
     plt.figure(figsize=(9, 6))
     plt.plot(val_steps, val_margins, label="Validation Margin", color="orange")
@@ -54,7 +54,7 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewa
     plt.ylabel("Reward Margin")
     plt.title("Reward Margin during Training")
     
-    plt.savefig(path + "margin_plot.png")
+    plt.savefig(path + "margin_plot.png", dpi=300)
     
     plt.figure(figsize=(9, 6))
     plt.plot(val_steps, val_chosen_rewards, label="Chosen Response Reward", color="green")
@@ -64,4 +64,4 @@ def save_plots(train_steps, train_losses, val_steps, val_losses, val_chosen_rewa
     plt.ylabel("Rewards (logratios between actor and reference)")
     plt.title("Rewards during Training")
     
-    plt.savefig(path + "rewards_plot.png")
+    plt.savefig(path + "rewards_plot.png", dpi=300)

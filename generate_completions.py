@@ -13,11 +13,13 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", type=str, required=True, options=["dpo", "dpop", "sft", "kl_sft"], default="dpop")
 parser.add_argument("--results_dir", type=str, default="results")
+parser.add_argument("--dataset", type=str, default="dataset/upenn_test.json")
 
 def main():
     args = parser.parse_args()
     results_dir = args.results_dir
     model = args.model
+    dataset = args.dataset
     
     PATH = f"{results_dir}/gpt2-{model}.pt"
     
@@ -35,7 +37,7 @@ def main():
     enc = get_encoder()
     
     # Read and parse the test prompts
-    test_set = json.loads(open('dataset/upenn_test.json').read())
+    test_set = json.loads(open(dataset).read())
     prompts = [pair["prompt"] for pair in test_set]
     
     # Generate completiosn for each prompt

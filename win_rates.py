@@ -13,11 +13,18 @@ import numpy as np
 from matplotlib import pyplot as plt
 import seaborn as sns
 from time import sleep
+import argparse
 
 load_dotenv()
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--results_files", type=str, required=True)
+
 
 def main():
+    args = parser.parse_args()
+    choices = args.results_files.split(",")
+    
     openai.api_key = os.getenv("OPENAI_API_KEY")
 
     client = OpenAI()
@@ -52,16 +59,14 @@ def main():
             results[i] = 1
         else:
             results[i] = 0
-
-    choices = ["sft", "kl_sft", "dpop", "dpo", "hf"]
     
     result_matrix = np.zeros((len(choices), len(choices)))
 
     for i in range(len(choices)):
         for j in range(i+1, len(choices)):
             print (choices[i], choices[j])
-            completions_1 = pd.read_csv(f"results/{choices[i]}_results.csv")
-            completions_2 = pd.read_csv(f"results/{choices[j]}_results.csv")
+            completions_1 = pd.read_csv(choices[i])
+            completions_2 = pd.read_csv(choices[j])
 
             k = 0
             first_wins = 0
